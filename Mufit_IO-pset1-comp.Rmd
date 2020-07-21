@@ -1,0 +1,161 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+library(readr)
+library(tidyverse)
+library(KnitroR)
+```
+
+
+Loading the dataset
+```{r}
+setwd("/Users/mufitcan/Desktop")
+io_data1 <- read_csv("psetOne.csv")
+```
+
+Some work rearranging the data, creating new variables etc. etc.
+```{r}
+io_data1 <- io_data1 %>%
+  group_by(Market) %>%
+  mutate(s_0 = 1 - sum(Shares)) %>%
+  ungroup()
+
+#Use it for matrix algebra
+inst <- data.matrix(io_data1[6:25])
+weight <- solve(t(inst) %*% inst)
+prod_char <- data.matrix(io_data1[1:5])
+diff_S = matrix(log(io_data1$Shares) - log(io_data1$s_0))
+
+```
+
+Obtaining an initial guess through 2-SLS
+```{r}
+proj = inst %*% solve(t(inst) %*% inst) %*% t(inst)
+b_tsls <- solve(t(prod_char) %*% proj %*% prod_char) %*% t(prod_char) %*% proj %*% diff_S
+```
+
+1.2.2: Berry 2-step
+```{r}
+invert_contract <- function(beta) {
+  #Creating Ksis
+  create_ksi <- function(ksi_guess) {
+    share_hat <- io_data1 %>%
+      mutate(ksi = ksi_guess) %>%
+      mutate(util_hat = (prod_char %*% matrix(beta)) + ksi) %>%
+      group_by(Market) %>%
+      mutate(share_hat = exp(util_hat)/(1 + sum(exp(util_hat)))) %>%
+      ungroup() %>%
+      mutate(new_ksi = ksi + log(Shares) - log(share_hat))
+    return(create_shares$new_ksi)
+  }
+ 
+  #Fixed point contraction 
+  best_ksi <- rep(0, length(io_data1$price))
+  crit <- 1
+  
+  while (crit > 1e-5 {
+    next_ksi <- create_ksi(best_ksi)
+    diff <- sum((best_ksi - next_ksi)^2)
+    best_ksi <- next_ksi
+  }
+  
+  ksi <- matrix(best_ksi)
+  
+  #counter bit of function
+  gmm_error <- t(ksi) %*% inst %*% weight %*% t(inst) %*% ksi
+  counter <<- counter+1
+  twostep_errors[[counter]] <<- gmm_error
+  
+  return(gmm_error1[1,1])
+}
+
+#setting counter value and creating list for errors to eventually graph
+counter = 0
+twostep_errors = list()
+
+berry_solution <- knitro(
+  objective = invert_contract,
+  x0 = c(4.7, -.7, .7, .1, .9),
+  xL = c(-10, rep(-3, 4)),
+  xU = c(10, rep(3, 4)))
+```
+
+
+1.2.3: Berry Inversion
+```{r}
+direct_inversion <- function(beta) {
+  ksi <- diff_S - (prod_char %*% matrix(beta))
+  gmm_error1 <- t(ksi) %*% inst %*% weight %*% t(inst) %*% ksi
+  
+  #counter bit of function
+  counter <<- counter+1
+  dirinv_errors[[counter]] <<- gmm_error1[1,1]
+  
+  return(gmm_error1[1,1])
+}
+
+#setting counter value and creating list for errors to eventually graph
+counter <- 0
+dirinv_errors <- list()
+
+# Solve for coefficients using berry direct inversion as starting point
+direct_solution <- knitro(
+  objective = direct_inversion,
+  x0 = rep(1,5))
+```
+
+
+1.3.2: Berry 1995
+
+```{r}
+#Creating T1ev errors
+rt1ev = function(n){ ## Function that returns n 
+  U = runif(n) ## independent draws from T1EV
+  t1ev = -log(-log(U))
+  return(t1ev)
+}
+
+epsilon = rt1ev(20) 
+
+#Inner Loop
+invert_1995 <- function(beta) {
+  beta = rep(rnorm(beta[1:5]) + rnorm(beta[6:10]), 20)
+  #Creating Ksis
+  create_ksi <- function(ksi_guess) {
+    share_hat <- io_data1 %>%
+      mutate(ksi = ksi_guess) %>%
+      mutate(util_hat = (prod_char %*% matrix(beta)) + ksi +epsilon) %>%
+      group_by(Market) %>%
+      mutate(share_hat = exp(util_hat)/(1 + sum(exp(util_hat)))) %>%
+      ungroup() %>%
+      mutate(new_ksi = ksi + log(Shares) - log(share_hat))
+    return(create_shares$new_ksi)
+  }
+ 
+  #Fixed point contraction 
+  best_ksi <- rep(0, length(io_data1$price))
+  crit <- 1
+  
+  while (crit > 1e-5 {
+    next_ksi <- create_ksi(best_ksi)
+    diff <- sum((best_ksi - next_ksi)^2)
+    best_ksi <- next_ksi
+  })
+  
+  ksi <- matrix(best_ksi)
+  
+  #counter bit of function
+  gmm_error <- t(ksi) %*% inst %*% weight %*% t(inst) %*% ksi
+  counter <<- counter+1
+  twostep_errors[[counter]] <<- gmm_error
+  
+  return(gmm_error1[1,1])
+  }
+
+#Outer loop
+direct_solution <- knitro(
+  objective = invert_1995,
+  x0 = rep(1,10))
+```
